@@ -1,0 +1,34 @@
+#!/usr/bin/python
+
+import json
+import urllib2
+import requests
+
+def clusterstatus():
+  clusterstatus = urllib2.urlopen('http://localhost:8983/solr/admin/collections?action=clusterstatus&wt=json')
+  data = json.load(clusterstatus)
+  return data
+
+def getnodes(data):
+  nodes = sorted(data["cluster"]["live_nodes"])
+  return nodes
+
+data = clusterstatus()
+servers = getnodes(data)
+
+for collection,meta0 in data["cluster"]["collections"].iteritems():
+  leaders = [0] * len(servers)
+  for shard,meta in meta0["shards"].iteritems():
+    replicaarray = [0] * len(meta["replicas"])
+    replicacount = 0
+    for replica,meta2 in meta["replicas"].iteritems():
+      replicaarray[replicacount] = [meta2["node_name"],replica]
+      replicacount += 1
+    if leaders[servers.index(replicaarray[0][0])] <= leaders[servers.index(replicaarray[1][0])]:
+      leaders[servers.index(replicaarray[0][0])] += 1
+      requests.get("http://localhost:8983/solr/admin/collections?action=ADDREPLICAPROP&shard="+shard+"&collection="+collection+"&replica="+replicaarray[0][1]+"&property=preferredLeader&property.value=true&shardUnique=true")
+      print collection +" "+ shard +" set "+ replicaarray[0][0] + " as default leader"
+    else:
+      leaders[servers.index(replicaarray[1][0])] += 1
+      requests.get("http://localhost:8983/solr/admin/collections?action=ADDREPLICAPROP&shard="+shard+"&collection="+collection+"&replica="+replicaarray[1][1]+"&property=preferredLeader&property.value=true&shardUnique=true")
+      print collection +" "+ shard +" set "+ replicaarray[1][0] + " as default leader"
