@@ -1,0 +1,59 @@
+#!/usr/bin/python
+
+import json
+import urllib2
+from tabulate import tabulate
+
+def clusterstatus():
+  statusjson = urllib2.urlopen('http://localhost:8983/solr/admin/collections?action=clusterstatus&wt=json')
+  data = json.load(statusjson)
+  return data
+
+def getnodes(data):
+  nodes = sorted(data["cluster"]["live_nodes"])
+  return nodes
+
+states = ["leaders","all","active","recovering","down","recovery failed"]
+
+data = clusterstatus()
+servers = getnodes(data)
+firstcolumn = ["server"] + servers
+status = []
+
+for server in firstcolumn:
+  tmp = []
+  tmp.append(server)
+  for state in states:
+    if server == "server":
+      tmp.append(state)
+    else:
+      tmp.append(0)
+  status.append(tmp)
+
+leaders = ""
+countleaders = 0
+countshards = 0
+
+for collection,meta in data["cluster"]["collections"].iteritems():
+  for shard,meta2 in meta["shards"].iteritems():
+    hasleader = False
+    countshards += 1
+    for replica,meta3 in meta2["replicas"].iteritems():
+      if 'leader' in meta3:
+        hasleader = True
+        status[servers.index(meta3["node_name"]) + 1][1] += 1
+      status[servers.index(meta3["node_name"]) + 1][status[0].index(meta3["state"])] += 1
+      status[servers.index(meta3["node_name"]) + 1][2] += 1
+    if hasleader is False:
+      leaders += collection + " " + shard + " is without leader\n  fix it - http://localhost:8983/solr/admin/collections?action=FORCELEADER&collection="+collection+"&shard="+shard+"\n"
+    else:
+      countleaders += 1
+
+print tabulate(status, headers="firstrow", tablefmt="grid")
+
+print
+print "countshards  = " + str(countshards)
+print "countleaders = " + str(countleaders)
+
+print
+print leaders
