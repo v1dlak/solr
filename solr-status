@@ -2,10 +2,19 @@
 
 import json
 import urllib2
+import argparse
 from tabulate import tabulate
 
-def clusterstatus():
-  statusjson = urllib2.urlopen('http://localhost:8983/solr/admin/collections?action=clusterstatus&wt=json')
+def parse_arg():
+  parser = argparse.ArgumentParser(description='Solr status')
+  parser.add_argument('-H', action="store", dest="hostname", default="localhost", help='hostname or IP address of solr WebUI/API (default: localhost)')
+  parser.add_argument('-p', action="store", dest="port", type=int, default=8983, help='port of solr WebUI/API (default: 8983)')
+
+  args = parser.parse_args()
+  return (args.hostname, str(args.port))
+
+def clusterstatus(hostname, port):
+  statusjson = urllib2.urlopen('http://'+hostname+':'+port+'/solr/admin/collections?action=clusterstatus&wt=json')
   data = json.load(statusjson)
   return data
 
@@ -15,7 +24,8 @@ def getnodes(data):
 
 states = ["leaders","all","active","recovering","down","recovery failed"]
 
-data = clusterstatus()
+(hostname, port) = parse_arg()
+data = clusterstatus(hostname, port)
 servers = getnodes(data)
 firstcolumn = ["server"] + servers
 status = []
@@ -39,13 +49,16 @@ for collection,meta in data["cluster"]["collections"].iteritems():
     hasleader = False
     countshards += 1
     for replica,meta3 in meta2["replicas"].iteritems():
+      if (meta3["node_name"] not in servers):
+        servers.append(meta3["node_name"])
+        status.append([meta3["node_name"], 0, 0, None, None, 0])
       if 'leader' in meta3:
         hasleader = True
         status[servers.index(meta3["node_name"]) + 1][1] += 1
       status[servers.index(meta3["node_name"]) + 1][status[0].index(meta3["state"])] += 1
       status[servers.index(meta3["node_name"]) + 1][2] += 1
     if hasleader is False:
-      leaders += collection + " " + shard + " is without leader\n  fix it - http://localhost:8983/solr/admin/collections?action=FORCELEADER&collection="+collection+"&shard="+shard+"\n"
+      leaders += collection + " " + shard + " is without leader\n  fix it - http://"+hostname+":"+port+"/solr/admin/collections?action=FORCELEADER&collection="+collection+"&shard="+shard+"\n"
     else:
       countleaders += 1
 
