@@ -22,7 +22,7 @@ def getnodes(data):
   nodes = sorted(data["cluster"]["live_nodes"])
   return nodes
 
-states = ["leaders","all","active","recovering","down","recovery failed"]
+states = ["leaders","all","active","recovering","down","recovery_failed"]
 
 (hostname, port) = parse_arg()
 data = clusterstatus(hostname, port)
